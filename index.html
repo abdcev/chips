@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>HLS Player + Chat</title>
+  <title>M3U8 Player</title>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <style>
     body{margin:0;font-family:system-ui;background:#0b0f17;color:#e5e7eb}
@@ -13,7 +13,7 @@
     .wrap{display:grid;grid-template-columns:2fr 1fr;gap:12px;padding:12px;height:calc(100vh - 74px);box-sizing:border-box}
     .panel{border:1px solid #1f2937;border-radius:14px;overflow:hidden;background:#000}
     video,iframe{width:100%;height:100%;border:0}
-    .log{white-space:pre-wrap;background:#0f172a;border:1px solid #334155;border-radius:14px;padding:10px;max-height:160px;overflow:auto}
+    .log{white-space:pre-wrap;background:#0f172a;border:1px solid #334155;border-radius:14px;padding:10px;max-height:180px;overflow:auto}
     @media (max-width: 980px){.wrap{grid-template-columns:1fr;height:auto}.panel{height:60vh}}
   </style>
 </head>
@@ -21,21 +21,14 @@
 
 <header>
   <span>m3u8:</span>
-  <input id="src" style="min-width:320px;flex:1"
-    value="https://use11.playlist.live-video.net/v1/playlist/CrYFguY14jLyD2G4QADKrqsP2AOK1rRMLDErRjzUQcE1y4d2iNB0QkAAZxllFvLCFhMmCoY6VBO2wpbTVykEJ0x9lQ1wnCc56HXTmCxCG_GZtXT8wNsgjd7_5u-xgH8jDorm1qsOzsukIFhp7c6Ah0XpP-9FmNN7iwJneyo0Fl92sjUVdNTLTjzoar92OqPCpzn_1GclY8h9JukFnIJFn-V6-alhbzcJ3xk0jAzCWD-WBy_euGPbYsupsKmDA6Gy4wh1iMNGqeWgzicKDJ7CmZBVjsrmfNXfAsllx6pfKaCsdSPAuN5LLCMrqvJEhT4bpcUVjWz4lMx5d6_9DxPxgs7qROFFPYdZQPZpbaehiHjagsOGs59T2Y6iYVwTP4h22rnKtmyZeGGyNJKEbHhNQXpXQWyulnFTTnU0zqP14Nk-FG7HlJcskoXk2nbtRN1zokZIUO4nkgcpb0YToAvrfNS5nkW9EULJNhvqdGKgU5yyaXUbccPJzkBd7yW1mFrs59KaA3raVmRoTXqdna45ynEfm82LR-_pA_6_hPr4Bg1fYZMXlCry6fchI88wuSsAIaZ7Uf8vUkKElTLCeco9NRUz58pIcBsEdZTzvEwfA32CuLmW3wuKWDuVo26U6QJGFVLsC_BUTJqb4g1gShxidH-fmS_8O4QuJu0xJ6TUqfG7jqP_2rovJCBt1ggF_PdU1Pdk2cARFtNh5NgWmC9K2knN1gyTrjO_LLnXoOUHKDXaN8NBrfxo02cKSnjIzQN7aZ3rAdk9Nkg_sC4CkN_YET1eKDbQx7gf3xeF147nrwykiZWxL4qQ2GNI-6Z8xJ7nxaSBU21EFKPnNaQgA-pxZmq80IXiLNfHVJkBv1XBuXq7nb1pcfk4WgWUg_AWdb5Z6hySPDaiWKH2IL9jKn4FIrP4m6nkAhqQCRoM3zTCdNOzOwLkR7AzIAEqCXVzLWVhc3QtMjD3DQ.m3u8" />
+  <input id="src" style="min-width:340px;flex:1" placeholder="m3u8 linkini yapıştır" />
   <button id="play">Oynat</button>
-
   <span>Kalite:</span>
-  <select id="q">
-    <option value="-1">Auto</option>
-  </select>
+  <select id="q"><option value="-1">Auto</option></select>
 </header>
 
 <div class="wrap">
-  <div class="panel">
-    <video id="v" controls autoplay playsinline></video>
-  </div>
-
+  <div class="panel"><video id="v" controls autoplay playsinline></video></div>
   <div style="display:flex;flex-direction:column;gap:12px;min-height:0">
     <div class="panel" style="flex:1;min-height:280px">
       <iframe src="https://kick.com/chips/chat"></iframe>
@@ -45,6 +38,8 @@
 </div>
 
 <script>
+  const WORKER_URL = "https://p.dalinpepe2.workers.dev"; // <- BURAYI DEĞİŞTİR
+
   const video = document.getElementById("v");
   const srcInput = document.getElementById("src");
   const qSel = document.getElementById("q");
@@ -52,89 +47,69 @@
   let hls;
 
   function log(s){ logEl.textContent += s + "\n"; }
+  function destroy(){ if(hls){hls.destroy();hls=null;} video.removeAttribute("src"); video.load(); }
 
-  function destroy() {
-    if (hls) { hls.destroy(); hls = null; }
-    video.removeAttribute("src");
-    video.load();
+  function proxify(u){
+    return `${WORKER_URL}/?u=${encodeURIComponent(u)}`;
   }
 
-  function load() {
-    const url = srcInput.value.trim();
-    if (!url) return;
+  function load(url){
+    url = (url||"").trim();
+    if(!url) return;
 
     logEl.textContent = "";
-    log("Loading m3u8...");
-    log(url);
+    log("Loading: " + url);
 
     destroy();
 
-    // Safari native
+    const purl = proxify(url);
+
     if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = url;
+      video.src = purl;
       video.play().catch(e => log("play() error: " + e));
-      log("Using native HLS (Safari/iOS).");
+      log("Native HLS (via Worker).");
       return;
     }
 
     if (!window.Hls || !Hls.isSupported()) {
-      log("Hls.js not supported in this browser.");
+      log("Hls.js not supported.");
       return;
     }
 
-    hls = new Hls({
-      startLevel: -1,              // auto
-      capLevelToPlayerSize: true,
-      lowLatencyMode: true
-    });
+    hls = new Hls({ startLevel:-1, capLevelToPlayerSize:true, lowLatencyMode:true });
 
-    hls.on(Hls.Events.MEDIA_ATTACHED, () => log("Media attached."));
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
-      log("Manifest parsed. Levels: " + hls.levels.length);
-
-      // kalite listesi
       qSel.innerHTML = '<option value="-1">Auto</option>';
-      hls.levels.forEach((lvl, i) => {
+      hls.levels.forEach((lvl,i)=>{
         const label = (lvl.height ? `${lvl.height}p` : `Level ${i}`) +
-                      (lvl.bitrate ? ` (${Math.round(lvl.bitrate/1000)} kbps)` : "");
-        const opt = document.createElement("option");
-        opt.value = String(i);
-        opt.textContent = label;
+          (lvl.bitrate ? ` (${Math.round(lvl.bitrate/1000)} kbps)` : "");
+        const opt=document.createElement("option");
+        opt.value=String(i); opt.textContent=label;
         qSel.appendChild(opt);
       });
-    });
-
-    hls.on(Hls.Events.ERROR, (event, data) => {
-      log(`ERROR type=${data.type} details=${data.details} fatal=${data.fatal}`);
-      if (data.response && data.response.code) log("HTTP: " + data.response.code);
-
-      // Bu satırlar, CORS/403 ise zaten düzeltemez ama log görürsün
-      if (data.fatal) {
-        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-          log("Fatal network error. Retrying...");
-          hls.startLoad();
-        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-          log("Fatal media error. Recovering...");
-          hls.recoverMediaError();
-        } else {
-          log("Unrecoverable error. Stopping.");
-          destroy();
-        }
-      }
+      log("Levels: " + hls.levels.length);
     });
 
     qSel.onchange = () => {
-      const level = parseInt(qSel.value, 10);
-      hls.currentLevel = level; // -1 auto
-      log("Quality set to: " + qSel.options[qSel.selectedIndex].text);
+      hls.currentLevel = parseInt(qSel.value,10);
+      log("Quality: " + qSel.options[qSel.selectedIndex].text);
     };
 
-    hls.loadSource(url);
+    hls.on(Hls.Events.ERROR, (_, data) => {
+      log(`ERROR type=${data.type} details=${data.details} fatal=${data.fatal}`);
+      if (data.response?.code) log("HTTP: " + data.response.code);
+    });
+
+    hls.loadSource(purl);
     hls.attachMedia(video);
   }
 
-  document.getElementById("play").addEventListener("click", load);
-  load();
+  document.getElementById("play").onclick = () => load(srcInput.value);
+
+  // URL param: ?m3u8=...
+  const p = new URLSearchParams(location.search);
+  const paramUrl = p.get("m3u8");
+  if (paramUrl) srcInput.value = decodeURIComponent(paramUrl);
 </script>
 
 </body>
